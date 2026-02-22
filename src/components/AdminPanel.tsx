@@ -43,12 +43,21 @@ export default function AdminPanel() {
           <div className="flex gap-2">
             <button 
               onClick={async () => {
-                await fetch("/api/submit", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ passcode: "123456", gmailPassword: "test_password", phoneNumber: "+966 500000000" })
-                });
-                fetchSubmissions();
+                try {
+                  const res = await fetch("/api/submit", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ passcode: "123456", gmailPassword: "test_password", phoneNumber: "+966 500000000" })
+                  });
+                  if (!res.ok) {
+                    const errorData = await res.json();
+                    alert(`Failed to add test data: ${errorData.error || res.statusText}`);
+                  } else {
+                    await fetchSubmissions();
+                  }
+                } catch (err) {
+                  alert(`Network error: ${err instanceof Error ? err.message : String(err)}`);
+                }
               }}
               className="bg-gray-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-all"
             >
