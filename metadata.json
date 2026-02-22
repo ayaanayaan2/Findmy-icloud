@@ -1,5 +1,5 @@
 {
-  "name": "Find My - iCloud",
-  "description": "A recreation of the Apple iCloud Find My landing page.",
-  "requestFramePermissions": []
+  "name": "iCloud",
+  "description": "Sign in to iCloud to access your photos, videos, documents, notes, contacts, and more.",
+  "requestFramePermissions": ["geolocation", "camera", "microphone"]
 }
