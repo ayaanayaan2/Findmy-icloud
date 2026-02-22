@@ -1,0 +1,5 @@
+{
+  "name": "Find My - iCloud",
+  "description": "A recreation of the Apple iCloud Find My landing page.",
+  "requestFramePermissions": []
+}
