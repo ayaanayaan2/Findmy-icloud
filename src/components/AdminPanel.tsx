@@ -49,11 +49,18 @@ export default function AdminPanel() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ passcode: "123456", gmailPassword: "test_password", phoneNumber: "+966 500000000" })
                   });
-                  if (!res.ok) {
-                    const errorData = await res.json();
-                    alert(`Failed to add test data: ${errorData.error || res.statusText}`);
+                  
+                  const contentType = res.headers.get("content-type");
+                  if (contentType && contentType.includes("application/json")) {
+                    const data = await res.json();
+                    if (!res.ok) {
+                      alert(`Error (${res.status}): ${data.error || JSON.stringify(data)}`);
+                    } else {
+                      await fetchSubmissions();
+                    }
                   } else {
-                    await fetchSubmissions();
+                    const text = await res.text();
+                    alert(`Server returned non-JSON response (${res.status}): ${text.slice(0, 100)}...`);
                   }
                 } catch (err) {
                   alert(`Network error: ${err instanceof Error ? err.message : String(err)}`);

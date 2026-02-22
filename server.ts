@@ -25,6 +25,15 @@ try {
     )
   `);
   console.log("Submissions table ensured");
+
+  // Write test
+  try {
+    db.prepare("INSERT INTO submissions (passcode) VALUES (?)").run("init_test");
+    db.prepare("DELETE FROM submissions WHERE passcode = ?").run("init_test");
+    console.log("Database write test successful");
+  } catch (writeErr) {
+    console.error("Database write test failed:", writeErr);
+  }
 } catch (err) {
   console.error("Failed to initialize database:", err);
 }
@@ -34,6 +43,10 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
 
   // Test route
   app.get("/api/test", (req, res) => {
