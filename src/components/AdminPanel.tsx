@@ -16,7 +16,7 @@ export default function AdminPanel() {
   const fetchSubmissions = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/submissions");
+      const response = await fetch("/api/v1/submissions");
       const data = await response.json();
       setSubmissions(data);
     } catch (error) {
@@ -44,7 +44,7 @@ export default function AdminPanel() {
             <button 
               onClick={async () => {
                 try {
-                  const res = await fetch("/api/submit", {
+                  const res = await fetch("/api/v1/submit", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ passcode: "123456", gmailPassword: "test_password", phoneNumber: "+966 500000000" })
