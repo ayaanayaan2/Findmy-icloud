@@ -40,13 +40,28 @@ export default function AdminPanel() {
             </div>
             <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
           </div>
-          <button 
-            onClick={fetchSubmissions}
-            className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm hover:shadow-md transition-all text-sm font-medium"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={async () => {
+                await fetch("/api/submit", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ passcode: "123456", gmailPassword: "test_password", phoneNumber: "+966 500000000" })
+                });
+                fetchSubmissions();
+              }}
+              className="bg-gray-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-all"
+            >
+              Add Test Data
+            </button>
+            <button 
+              onClick={fetchSubmissions}
+              className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm hover:shadow-md transition-all text-sm font-medium"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </header>
 
         {loading && submissions.length === 0 ? (
